@@ -1,0 +1,3 @@
+import { StyleSheet,Text,View } from "react-native"; import { SafeAreaView } from "react-native-safe-area-context";
+export default function Goals(){return <SafeAreaView style={s.safe}><View style={s.container}><Text style={s.title}>Metas</Text><Text style={s.muted}>Crie objetivos, acompanhe o progresso e registre contribuições. Esta tela será expandida na próxima etapa.</Text></View></SafeAreaView>}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#0A0A0F"},container:{padding:20,gap:12},title:{color:"#F7F7FA",fontSize:30,fontWeight:"800"},muted:{color:"#858592",fontSize:15,lineHeight:22}});
