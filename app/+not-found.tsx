@@ -1,0 +1,3 @@
+import { Link } from "expo-router"; import { StyleSheet,Text,View } from "react-native";
+export default function NotFound(){return <View style={s.v}><Text style={s.t}>Página não encontrada</Text><Link href="/" style={s.l}>Voltar ao início</Link></View>}
+const s=StyleSheet.create({v:{flex:1,backgroundColor:"#0A0A0F",alignItems:"center",justifyContent:"center",gap:16},t:{color:"#F7F7FA",fontSize:22,fontWeight:"700"},l:{color:"#C9F23D",fontSize:16}});
