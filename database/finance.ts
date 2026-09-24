@@ -152,3 +152,50 @@ export async function restoreBackup(db: SQLiteDatabase, data: any) {
   if (Array.isArray(data.contributions)) for (const c of data.contributions) await db.runAsync("INSERT INTO goal_contributions(id,goal_id,amount,date,note) VALUES(?,?,?,?,?)",c.id,c.goal_id,c.amount,c.date,c.note ?? null);
   if (Array.isArray(data.recurring)) for (const r of data.recurring) await db.runAsync("INSERT INTO recurring_transactions(id,type,description,amount,category_id,payment_method,frequency,next_date,active) VALUES(?,?,?,?,?,?,?,?,?)",r.id,r.type,r.description,r.amount,r.category_id ?? null,r.payment_method ?? null,r.frequency,r.next_date,r.active ?? 1);
 }
+
+
+function advanceRecurringDate(date: string, frequency: "weekly"|"monthly"|"yearly") {
+  const d = new Date(date + "T12:00:00");
+  if (frequency === "weekly") d.setDate(d.getDate() + 7);
+  else if (frequency === "monthly") d.setMonth(d.getMonth() + 1);
+  else d.setFullYear(d.getFullYear() + 1);
+  return localDate(d);
+}
+
+export async function createRecurring(
+  db: SQLiteDatabase,
+  values: { type: TransactionType; description: string; amount: number; categoryId: string | null; frequency: "weekly"|"monthly"|"yearly"; firstDate: string }
+) {
+  await db.runAsync(
+    "INSERT INTO recurring_transactions(type,description,amount,category_id,frequency,next_date,active) VALUES(?,?,?,?,?,?,1)",
+    values.type, values.description, values.amount, values.categoryId, values.frequency,
+    advanceRecurringDate(values.firstDate, values.frequency)
+  );
+  return insertTransaction(db, {
+    type: values.type,
+    description: values.description,
+    amount: values.amount,
+    date: values.firstDate,
+    categoryId: values.categoryId,
+    paymentMethod: null
+  });
+}
+
+export async function applyDueRecurring(db: SQLiteDatabase) {
+  const today = localDate();
+  const due = await db.getAllAsync<any>(
+    "SELECT * FROM recurring_transactions WHERE active=1 AND next_date<=? ORDER BY next_date",
+    today
+  );
+  for (const item of due) {
+    let next = item.next_date;
+    while (next <= today) {
+      await db.runAsync(
+        "INSERT INTO transactions(type,description,amount,date,category_id,payment_method,recurrence_id) VALUES(?,?,?,?,?,?,?)",
+        item.type,item.description,item.amount,next,item.category_id,item.payment_method,item.id
+      );
+      next = advanceRecurringDate(next,item.frequency);
+    }
+    await db.runAsync("UPDATE recurring_transactions SET next_date=? WHERE id=?",next,item.id);
+  }
+}
