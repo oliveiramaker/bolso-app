@@ -1,3 +1,22 @@
-import { StyleSheet,Text,View } from "react-native"; import { SafeAreaView } from "react-native-safe-area-context";
-export default function Budgets(){return <SafeAreaView style={s.safe}><View style={s.container}><Text style={s.title}>Orçamento</Text><Text style={s.muted}>Defina limites por categoria. Esta tela será expandida na próxima etapa.</Text></View></SafeAreaView>}
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#0A0A0F"},container:{padding:20,gap:12},title:{color:"#F7F7FA",fontSize:30,fontWeight:"800"},muted:{color:"#858592",fontSize:15,lineHeight:22}});
+import { useFocusEffect } from "expo-router";
+import { useCallback,useState } from "react";
+import { Alert,Pressable,ScrollView,StyleSheet,Text,TextInput,View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useSQLiteContext } from "expo-sqlite";
+import { currentMonth,deleteBudget,getBudgets,getCategories,saveBudget } from "@/database/finance";
+import type { Category } from "@/database/types";
+import { formatBRL } from "@/utils/currency";
+import { monthLabel,shiftMonth } from "@/utils/date";
+
+export default function Budgets(){
+ const db=useSQLiteContext();const [month,setMonth]=useState(currentMonth());const [items,setItems]=useState<any[]>([]);const [cats,setCats]=useState<Category[]>([]);const [cat,setCat]=useState("");const [amount,setAmount]=useState("");
+ const load=useCallback(async()=>{setItems(await getBudgets(db,month));setCats(await getCategories(db,"expense"));},[db,month]);useFocusEffect(useCallback(()=>{load()},[load]));
+ const save=async()=>{const n=Number(amount.replace(",","."));if(!cat||!Number.isFinite(n)||n<=0){Alert.alert("Dados inválidos","Escolha uma categoria e informe um limite.");return}await saveBudget(db,cat,n,month);setAmount("");await load();};
+ return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.container}><Text style={s.title}>Orçamento</Text><Text style={s.muted}>Defina limites mensais por categoria.</Text>
+ <View style={s.month}><Pressable onPress={()=>setMonth(shiftMonth(month,-1))}><Text style={s.arrow}>‹</Text></Pressable><Text style={s.monthText}>{monthLabel(month)}</Text><Pressable onPress={()=>setMonth(shiftMonth(month,1))}><Text style={s.arrow}>›</Text></Pressable></View>
+ <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{cats.map(c=><Pressable key={c.id} onPress={()=>setCat(c.id)} style={[s.chip,cat===c.id&&s.selected]}><Text style={s.chipText}>{c.name}</Text></Pressable>)}</ScrollView>
+ <View style={s.row}><TextInput value={amount} onChangeText={setAmount} placeholder="Limite R$" placeholderTextColor="#666673" keyboardType="decimal-pad" style={s.input}/><Pressable onPress={save} style={s.save}><Text style={s.saveText}>Definir</Text></Pressable></View>
+ <View style={s.section}>{items.length===0?<Text style={s.muted}>Nenhum orçamento definido.</Text>:items.map(i=>{const pct=Math.min(i.amount?i.spent/i.amount:0,1);return <View key={i.id} style={s.item}><View style={s.itemHead}><Text style={s.name}>{i.category_name}</Text><Pressable onPress={()=>Alert.alert("Excluir orçamento?","",[{text:"Cancelar",style:"cancel"},{text:"Excluir",style:"destructive",onPress:async()=>{await deleteBudget(db,i.id);load();}}])}><Text style={s.delete}>Excluir</Text></Pressable></View><Text style={s.muted}>{formatBRL(i.spent)} de {formatBRL(i.amount)}</Text><View style={s.bar}><View style={[s.fill,{width:(pct*100)+"%"},i.spent>i.amount&&s.over]}/></View><Text style={[s.remaining,i.spent>i.amount&&s.overText]}>{i.spent>i.amount?"Acima em "+formatBRL(i.spent-i.amount):"Restam "+formatBRL(i.amount-i.spent)}</Text></View>})}</View>
+ </ScrollView></SafeAreaView>
+}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#0A0A0F"},container:{padding:20,gap:13,paddingBottom:40},title:{color:"#F7F7FA",fontSize:28,fontWeight:"800"},muted:{color:"#858592",fontSize:13},month:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",backgroundColor:"#14141C",padding:8,borderRadius:16},monthText:{color:"#F7F7FA",fontWeight:"700"},arrow:{color:"#C9F23D",fontSize:28,paddingHorizontal:10},chip:{backgroundColor:"#14141C",padding:10,borderRadius:20},selected:{backgroundColor:"#C9F23D"},chipText:{color:"#F7F7FA",fontSize:12},row:{flexDirection:"row",gap:8},input:{flex:1,backgroundColor:"#14141C",color:"#F7F7FA",padding:14,borderRadius:13},save:{backgroundColor:"#C9F23D",paddingHorizontal:18,borderRadius:13,justifyContent:"center"},saveText:{fontWeight:"800"},section:{backgroundColor:"#14141C",borderRadius:18,padding:16},item:{paddingVertical:14,borderBottomWidth:1,borderBottomColor:"#282833"},itemHead:{flexDirection:"row",justifyContent:"space-between"},name:{color:"#F7F7FA",fontWeight:"700"},delete:{color:"#FF6675",fontSize:12},bar:{height:9,backgroundColor:"#292934",borderRadius:8,overflow:"hidden",marginTop:9},fill:{height:"100%",backgroundColor:"#C9F23D"},over:{backgroundColor:"#FF6675"},remaining:{color:"#858592",fontSize:11,marginTop:5},overText:{color:"#FF6675"}});
