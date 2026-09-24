@@ -1,20 +1,32 @@
-import { useSQLiteContext } from "expo-sqlite";
-import { useState } from "react";
-import { Alert,Pressable,StyleSheet,Text,TextInput,View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSQLiteContext } from "expo-sqlite";
+import { createInstallments, currentMonth, deleteTransaction, getCategories, getMonthTransactions, insertTransaction } from "@/database/finance";
+import type { Category, TransactionType } from "@/database/types";
+import { formatBRL } from "@/utils/currency";
+import { monthLabel, shiftMonth } from "@/utils/date";
 
 export default function Transactions(){
- const db=useSQLiteContext(); const [description,setDescription]=useState(""); const [amount,setAmount]=useState("");
- async function add(type:"income"|"expense"){
-   const n=Number(amount.replace(",","."));
-   if(!description.trim()||!Number.isFinite(n)||n<=0){Alert.alert("Valor inválido","Informe descrição e um valor maior que zero.");return}
-   await db.runAsync("INSERT INTO transactions (type,description,amount,date) VALUES (?,?,?,date('now','localtime'))",type,description.trim(),n);
-   setDescription("");setAmount("");Alert.alert("Salvo","Movimento registrado.");
- }
- return <SafeAreaView style={styles.safe}><View style={styles.container}><Text style={styles.title}>Movimentos</Text><Text style={styles.muted}>Registre entradas e gastos.</Text>
- <TextInput placeholder="Descrição" placeholderTextColor="#666673" value={description} onChangeText={setDescription} style={styles.input}/>
- <TextInput placeholder="Valor" placeholderTextColor="#666673" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" style={styles.input}/>
- <View style={styles.row}><Pressable style={[styles.button,styles.income]} onPress={()=>add("income")}><Text style={styles.buttonText}>+ Entrada</Text></Pressable><Pressable style={[styles.button,styles.expense]} onPress={()=>add("expense")}><Text style={styles.buttonText}>− Gasto</Text></Pressable></View>
- </View></SafeAreaView>
+ const db=useSQLiteContext(); const [month,setMonth]=useState(currentMonth()); const [list,setList]=useState<any[]>([]);
+ const [type,setType]=useState<TransactionType>("expense"); const [desc,setDesc]=useState(""); const [amount,setAmount]=useState(""); const [date,setDate]=useState(new Date().toISOString().slice(0,10)); const [cat,setCat]=useState<string|null>(null); const [cats,setCats]=useState<Category[]>([]); const [installments,setInstallments]=useState("1");
+ const load=useCallback(async()=>{setList(await getMonthTransactions(db,month));setCats(await getCategories(db,type));},[db,month,type]);
+ useFocusEffect(useCallback(()=>{load();},[load]));
+ const save=async()=>{const n=Number(amount.replace(",", "."));const count=Math.max(1,parseInt(installments||"1",10)||1);if(!desc.trim()||!Number.isFinite(n)||n<=0){Alert.alert("Dados inválidos","Informe descrição e valor.");return} if(count>1) await createInstallments(db,{type,description:desc.trim(),totalAmount:n,date,categoryId:cat,paymentMethod:null,installments:count}); else await insertTransaction(db,{type,description:desc.trim(),amount:n,date,categoryId:cat,paymentMethod:null});setDesc("");setAmount("");setInstallments("1");await load();Alert.alert("Salvo","Movimentação registrada.");};
+ const remove=(id:number)=>Alert.alert("Excluir movimentação?","Esta ação não pode ser desfeita.",[{text:"Cancelar",style:"cancel"},{text:"Excluir",style:"destructive",onPress:async()=>{await deleteTransaction(db,id);load();}}]);
+ return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.container}>
+  <Text style={s.title}>Movimentos</Text><Text style={s.muted}>Registre e acompanhe entradas e gastos.</Text>
+  <View style={s.month}><Pressable onPress={()=>setMonth(shiftMonth(month,-1))}><Text style={s.arrow}>‹</Text></Pressable><Text style={s.monthText}>{monthLabel(month)}</Text><Pressable onPress={()=>setMonth(shiftMonth(month,1))}><Text style={s.arrow}>›</Text></Pressable></View>
+  <View style={s.typeRow}><Pressable style={[s.typeBtn,type==="expense"&&s.selected]} onPress={()=>setType("expense")}><Text style={s.typeText}>− Gasto</Text></Pressable><Pressable style={[s.typeBtn,type==="income"&&s.selected]} onPress={()=>setType("income")}><Text style={s.typeText}>+ Entrada</Text></Pressable></View>
+  <TextInput value={desc} onChangeText={setDesc} placeholder="Descrição" placeholderTextColor="#666673" style={s.input}/>
+  <TextInput value={amount} onChangeText={setAmount} placeholder="Valor (R$)" placeholderTextColor="#666673" keyboardType="decimal-pad" style={s.input}/>
+  <TextInput value={date} onChangeText={setDate} placeholder="Data AAAA-MM-DD" placeholderTextColor="#666673" style={s.input}/>
+  <Text style={s.small}>Categoria</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{cats.map(c=><Pressable key={c.id} onPress={()=>setCat(c.id)} style={[s.chip,cat===c.id&&s.chipSelected]}><Text style={s.chipText}>{c.name}</Text></Pressable>)}</ScrollView>
+  <View style={s.installRow}><Text style={s.small}>Parcelas</Text><TextInput value={installments} onChangeText={setInstallments} keyboardType="number-pad" style={s.installInput}/></View>
+  <Pressable style={s.save} onPress={save}><Text style={s.saveText}>Salvar movimentação</Text></Pressable>
+  <View style={s.section}><Text style={s.sectionTitle}>Lançamentos</Text>{list.length===0?<Text style={s.muted}>Nenhum lançamento neste mês.</Text>:list.map(t=><Pressable key={t.id} onLongPress={()=>remove(t.id)} style={s.item}><View style={{flex:1}}><Text style={s.itemTitle}>{t.description}</Text><Text style={s.muted}>{t.category_name??"Sem categoria"} • {t.date}</Text></View><Text style={[s.valueSmall,t.type==="income"?s.green:s.red]}>{t.type==="income"?"+":"−"} {formatBRL(t.amount)}</Text></Pressable>)}</View>
+  <Text style={s.hint}>Toque e segure um lançamento para excluir.</Text>
+ </ScrollView></SafeAreaView>
 }
-const styles=StyleSheet.create({safe:{flex:1,backgroundColor:"#0A0A0F"},container:{padding:20,gap:14},title:{color:"#F7F7FA",fontSize:30,fontWeight:"800"},muted:{color:"#858592"},input:{backgroundColor:"#171720",color:"#F7F7FA",borderRadius:16,padding:17,fontSize:16,borderWidth:1,borderColor:"#282833"},row:{flexDirection:"row",gap:12},button:{flex:1,padding:17,borderRadius:16,alignItems:"center"},income:{backgroundColor:"#C9F23D"},expense:{backgroundColor:"#24242E"},buttonText:{fontWeight:"800",color:"#0A0A0F"}});
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#0A0A0F"},container:{padding:20,gap:12,paddingBottom:40},title:{color:"#F7F7FA",fontSize:28,fontWeight:"800"},muted:{color:"#858592",fontSize:13},month:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",backgroundColor:"#14141C",borderRadius:16,padding:8},monthText:{color:"#F7F7FA",fontWeight:"700"},arrow:{color:"#C9F23D",fontSize:28,paddingHorizontal:10},typeRow:{flexDirection:"row",gap:8},typeBtn:{flex:1,padding:13,borderRadius:13,backgroundColor:"#14141C",alignItems:"center"},selected:{backgroundColor:"#25252F",borderWidth:1,borderColor:"#C9F23D"},typeText:{color:"#F7F7FA",fontWeight:"700"},input:{backgroundColor:"#14141C",borderRadius:14,padding:15,color:"#F7F7FA",fontSize:15},small:{color:"#858592",fontSize:12,fontWeight:"700"},chip:{backgroundColor:"#14141C",paddingHorizontal:13,paddingVertical:9,borderRadius:20},chipSelected:{backgroundColor:"#C9F23D"},chipText:{color:"#F7F7FA",fontSize:12},installRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},installInput:{backgroundColor:"#14141C",color:"#F7F7FA",borderRadius:12,padding:10,width:70,textAlign:"center"},save:{backgroundColor:"#C9F23D",padding:16,borderRadius:15,alignItems:"center"},saveText:{color:"#0A0A0F",fontWeight:"800"},section:{backgroundColor:"#14141C",borderRadius:18,padding:16,marginTop:8},sectionTitle:{color:"#F7F7FA",fontSize:17,fontWeight:"700",marginBottom:8},item:{flexDirection:"row",alignItems:"center",paddingVertical:12,borderBottomWidth:1,borderBottomColor:"#24242D"},itemTitle:{color:"#F7F7FA",fontWeight:"600"},valueSmall:{fontSize:13,fontWeight:"700"},green:{color:"#C9F23D"},red:{color:"#FF6675"},hint:{color:"#555560",fontSize:11,textAlign:"center"}});
