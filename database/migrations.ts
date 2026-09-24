@@ -97,6 +97,10 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_goal_contributions_goal ON goal_contributions(goal_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_next_date ON recurring_transactions(next_date);
     `);
+    const transactionColumns = await db.getAllAsync<{ name: string }>("PRAGMA table_info(transactions)");
+    if (!transactionColumns.some(column => column.name === "recurrence_id")) {
+      await db.execAsync("ALTER TABLE transactions ADD COLUMN recurrence_id INTEGER");
+    }
     version = 1;
   }
 
