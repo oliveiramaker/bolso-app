@@ -134,3 +134,21 @@ export async function addGoalContribution(db: SQLiteDatabase, goalId: number, am
 export async function deleteAllData(db: SQLiteDatabase) {
   await db.execAsync("DELETE FROM goal_contributions; DELETE FROM transactions; DELETE FROM budgets; DELETE FROM goals;");
 }
+
+
+export async function restoreBackup(db: SQLiteDatabase, data: any) {
+  if (!data || !Array.isArray(data.transactions) || !Array.isArray(data.budgets) || !Array.isArray(data.goals)) {
+    throw new Error("Backup inválido");
+  }
+  await db.execAsync("DELETE FROM goal_contributions; DELETE FROM transactions; DELETE FROM budgets; DELETE FROM goals; DELETE FROM recurring_transactions;");
+  for (const t of data.transactions) {
+    await db.runAsync(
+      "INSERT INTO transactions(id,type,description,amount,date,category_id,payment_method,installment_group_id,installment_number,recurrence_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+      t.id,t.type,t.description,t.amount,t.date,t.category_id ?? null,t.payment_method ?? null,t.installment_group_id ?? null,t.installment_number ?? null,t.recurrence_id ?? null,t.created_at ?? new Date().toISOString()
+    );
+  }
+  for (const b of data.budgets) await db.runAsync("INSERT INTO budgets(id,category_id,amount,month) VALUES(?,?,?,?)",b.id,b.category_id,b.amount,b.month);
+  for (const g of data.goals) await db.runAsync("INSERT INTO goals(id,name,target,saved,deadline) VALUES(?,?,?,?,?)",g.id,g.name,g.target,g.saved,g.deadline ?? null);
+  if (Array.isArray(data.contributions)) for (const c of data.contributions) await db.runAsync("INSERT INTO goal_contributions(id,goal_id,amount,date,note) VALUES(?,?,?,?,?)",c.id,c.goal_id,c.amount,c.date,c.note ?? null);
+  if (Array.isArray(data.recurring)) for (const r of data.recurring) await db.runAsync("INSERT INTO recurring_transactions(id,type,description,amount,category_id,payment_method,frequency,next_date,active) VALUES(?,?,?,?,?,?,?,?,?)",r.id,r.type,r.description,r.amount,r.category_id ?? null,r.payment_method ?? null,r.frequency,r.next_date,r.active ?? 1);
+}
