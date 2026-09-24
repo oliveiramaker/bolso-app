@@ -6,5 +6,6 @@ export default function TabsLayout(){return <Tabs screenOptions={{headerShown:fa
 <Tabs.Screen name="transactions" options={{title:"Movimentos",tabBarIcon:({color,size})=><Ionicons name="swap-horizontal-outline" color={color} size={size}/>}}/>
 <Tabs.Screen name="budgets" options={{title:"Orçamento",tabBarIcon:({color,size})=><Ionicons name="pie-chart-outline" color={color} size={size}/>}}/>
 <Tabs.Screen name="goals" options={{title:"Metas",tabBarIcon:({color,size})=><Ionicons name="flag-outline" color={color} size={size}/>}}/>
+<Tabs.Screen name="settings" options={{href:null}} />
 <Tabs.Screen name="reports" options={{title:"Relatórios",tabBarIcon:({color,size})=><Ionicons name="bar-chart-outline" color={color} size={size}/>}}/>
 </Tabs>}
