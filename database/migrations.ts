@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 const categories = [
   ["alimentacao","Alimentação","restaurant","expense"],
@@ -114,5 +114,13 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 2;
   }
 
+  if (version < 3) {
+    const columns = await db.getAllAsync<{name:string}>("PRAGMA table_info(transactions)");
+    if (!columns.some(c=>c.name==="status")) await db.execAsync("ALTER TABLE transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
+    if (!columns.some(c=>c.name==="paid_at")) await db.execAsync("ALTER TABLE transactions ADD COLUMN paid_at TEXT");
+    // Preserve existing historical entries as settled; new entries start pending.
+    await db.execAsync("UPDATE transactions SET status='paid', paid_at=date WHERE status='pending'");
+    version=3;
+  }
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
 }
