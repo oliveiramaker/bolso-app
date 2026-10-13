@@ -40,6 +40,21 @@ export async function getMonthSummary(db: SQLiteDatabase, month: string) {
   );
 }
 
+export async function setTransactionPaid(db: SQLiteDatabase,id:number,paid:boolean) {
+  await db.runAsync("UPDATE transactions SET status=?, paid_at=? WHERE id=?",
+    paid?"paid":"pending",paid?localDate():null,id);
+}
+
+export async function getPaymentOverview(db: SQLiteDatabase,month:string) {
+  return (await db.getFirstAsync<{income:number;paid:number;pending:number}>(
+    `SELECT
+      COALESCE(SUM(CASE WHEN type='income' AND status='paid' THEN amount ELSE 0 END),0) income,
+      COALESCE(SUM(CASE WHEN type='expense' AND status='paid' THEN amount ELSE 0 END),0) paid,
+      COALESCE(SUM(CASE WHEN type='expense' AND status='pending' THEN amount ELSE 0 END),0) pending
+     FROM transactions WHERE substr(date,1,7)=?`,month
+  ))??{income:0,paid:0,pending:0};
+}
+
 export async function deleteTransaction(db: SQLiteDatabase, id: number) {
   await db.runAsync("DELETE FROM transactions WHERE id=?", id);
 }
